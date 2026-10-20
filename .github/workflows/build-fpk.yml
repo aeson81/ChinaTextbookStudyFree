@@ -18,13 +18,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. 安装 FFmpeg 媒体工具
+      # 2. 安装系统级媒体工具 FFmpeg
       - name: Install FFmpeg
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
-      # 3. 配置 Python 环境
+      # 3. 配置 Python 环境并补齐音视频处理依赖
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -33,44 +33,46 @@ jobs:
       - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
+          pip install pydub requests tqdm mutagen pillow
           find . -name "requirements.txt" -exec pip install -r {} + || true
 
-      # 4. 配置 Node.js 环境 (Node.js 20)
+      # 4. 配置 Node.js 20 环境
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      # 5. 安装依赖并分步生成数据与构建 Next.js
+      # 5. 一键完成依赖安装、数据生成与 Next.js 编译
       - name: Install dependencies and Build
         run: |
+          # 安装全部工作区依赖
           npm install
-          
-          # 进入应用目录
+
+          # 进入 Web 主程序目录
           cd apps/web
-          
-          # 关键步骤1：生成课本与课文的 JSON 索引数据（供 generateStaticParams 读取）
+
+          # 关键点 1：精准执行 TypeScript 脚本生成教材与课文 JSON 数据
           npx tsx scripts/build-data.ts
-          
-          # 关键步骤2：音频脚本处理（若缺失音源允许跳过，不阻碍构建）
+
+          # 关键点 2：处理音频数据（即使缺音源也不中断后续编译）
           node ../../scripts/run-python.mjs ../../scripts/tts/web_audio.py || true
-          
-          # 关键步骤3：执行 Next.js 静态编译导出
+
+          # 关键点 3：执行 Next.js 静态 HTML 编译导出
           npx next build
 
-      # 6. 组装 fpk 目录结构
+      # 6. 校验编译产物并组装 FPK 目录结构
       - name: Prepare FPK files
         run: |
+          # 校验静态页面是否成功生成
+          if [ ! -d "apps/web/out" ]; then
+            echo "Error: apps/web/out directory does not exist!"
+            exit 1
+          fi
+
           mkdir -p fpk_package
           
-          # 复制静态网页产物
-          if [ -d "apps/web/out" ]; then
-            cp -r apps/web/out/* fpk_package/
-          elif [ -d "out" ]; then
-            cp -r out/* fpk_package/
-          elif [ -d "dist" ]; then
-            cp -r dist/* fpk_package/
-          fi
+          # 复制导出的静态网页
+          cp -r apps/web/out/* fpk_package/
 
           # 创建 manifest.json
           cat << 'EOF' > fpk_package/manifest.json
@@ -106,21 +108,21 @@ jobs:
           EOF
 
           # 复制图标
-          if [ -f "public/favicon.ico" ]; then
-            cp public/favicon.ico fpk_package/icon.png
-          elif [ -f "apps/web/public/favicon.ico" ]; then
+          if [ -f "apps/web/public/favicon.ico" ]; then
             cp apps/web/public/favicon.ico fpk_package/icon.png
+          elif [ -f "public/favicon.ico" ]; then
+            cp public/favicon.ico fpk_package/icon.png
           else
             touch fpk_package/icon.png
           fi
 
-      # 7. 打包为 .fpk
+      # 7. 压缩为 .fpk 安装包
       - name: Compress to .fpk
         run: |
           cd fpk_package
           tar -czvf ../china-textbook-study_${{ github.ref_name }}.fpk .
 
-      # 8. 上传到 GitHub Release
+      # 8. 发布到 GitHub Release
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
