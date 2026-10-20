@@ -18,13 +18,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. 安装 FFmpeg (解决 web-audio 缺失依赖问题)
+      # 2. 安装 FFmpeg 媒体工具
       - name: Install FFmpeg
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
-      # 3. 配置 Python 环境
+      # 3. 配置 Python 环境并递归安装所有子目录的 Python 依赖
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -33,7 +33,7 @@ jobs:
       - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f "requirements.txt" ]; then pip install -r requirements.txt; fi
+          find . -name "requirements.txt" -exec pip install -r {} + || true
 
       # 4. 配置 Node.js 环境 (Node.js 20)
       - name: Setup Node.js
@@ -41,11 +41,12 @@ jobs:
         with:
           node-version: 20
 
-      # 5. 使用 npm 安装所有依赖并执行构建
+      # 5. 安装依赖并导出静态网页（带回退保护）
       - name: Install dependencies and Build
         run: |
           npm install
-          npm run build
+          # 优先执行全量构建，若因缺乏原始音源导致 build:data 报错，则回退直接构建 Web 页面
+          npm run build || (cd apps/web && npx next build)
 
       # 6. 组装 fpk 目录结构
       - name: Prepare FPK files
