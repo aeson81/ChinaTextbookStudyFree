@@ -24,7 +24,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
-      # 3. 配置 Python 环境并递归安装所有子目录的 Python 依赖
+      # 3. 配置 Python 环境
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -41,12 +41,22 @@ jobs:
         with:
           node-version: 20
 
-      # 5. 安装依赖并导出静态网页（带回退保护）
+      # 5. 安装依赖并分步生成数据与构建 Next.js
       - name: Install dependencies and Build
         run: |
           npm install
-          # 优先执行全量构建，若因缺乏原始音源导致 build:data 报错，则回退直接构建 Web 页面
-          npm run build || (cd apps/web && npx next build)
+          
+          # 进入应用目录
+          cd apps/web
+          
+          # 关键步骤1：生成课本与课文的 JSON 索引数据（供 generateStaticParams 读取）
+          npx tsx scripts/build-data.ts
+          
+          # 关键步骤2：音频脚本处理（若缺失音源允许跳过，不阻碍构建）
+          node ../../scripts/run-python.mjs ../../scripts/tts/web_audio.py || true
+          
+          # 关键步骤3：执行 Next.js 静态编译导出
+          npx next build
 
       # 6. 组装 fpk 目录结构
       - name: Prepare FPK files
