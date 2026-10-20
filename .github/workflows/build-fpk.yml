@@ -3,11 +3,11 @@ name: Build and Release FPK
 on:
   push:
     tags:
-      - 'v*' # 当提交打上 v 开头的 tag 时触发（如 v1.0.0）
-  workflow_dispatch: # 允许在 GitHub 网页端一键手动触发
+      - 'v*'
+  workflow_dispatch:
 
 permissions:
-  contents: write # 给予 Release 创建与文件写入权限
+  contents: write
 
 jobs:
   build-fpk:
@@ -18,30 +18,45 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. 安装 Node.js 环境
+      # 2. 配置 Python 环境 (解决 web_audio.py 脚本运行依赖)
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f "requirements.txt" ]; then pip install -r requirements.txt; fi
+
+      # 3. 配置 pnpm 与 Node.js 环境
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18
+          cache: 'pnpm'
 
-      # 3. 安装依赖与构建网页静态文件
+      # 4. 安装依赖并构建项目
       - name: Install dependencies and Build
         run: |
-          npm install
-          npm run build
+          pnpm install --no-frozen-lockfile
+          pnpm run build
 
-      # 4. 组装 fpk 标准包结构
+      # 5. 组装 fpk 目录结构
       - name: Prepare FPK files
         run: |
           mkdir -p fpk_package
           
-          # 复制构建产物（自动适配不同目录输出）
+          # 复制 Next.js 导出的静态网页文件
           if [ -d "apps/web/out" ]; then
             cp -r apps/web/out/* fpk_package/
           elif [ -d "out" ]; then
             cp -r out/* fpk_package/
-          elif [ -d "dist" ]; then
-            cp -r dist/* fpk_package/
           fi
 
           # 创建 manifest.json
@@ -77,20 +92,22 @@ jobs:
                 - ./:/usr/share/nginx/html
           EOF
 
-          # 复制或生成图标
+          # 复制图标
           if [ -f "public/favicon.ico" ]; then
             cp public/favicon.ico fpk_package/icon.png
+          elif [ -f "apps/web/public/favicon.ico" ]; then
+            cp apps/web/public/favicon.ico fpk_package/icon.png
           else
             touch fpk_package/icon.png
           fi
 
-      # 5. 压缩为 .fpk 安装包
+      # 6. 打包为 .fpk
       - name: Compress to .fpk
         run: |
           cd fpk_package
           tar -czvf ../china-textbook-study_${{ github.ref_name }}.fpk .
 
-      # 6. 发布到 GitHub Release
+      # 7. 上传到 GitHub Release
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
