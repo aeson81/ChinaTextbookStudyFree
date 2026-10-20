@@ -18,7 +18,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. 配置 Python 环境
+      # 2. 配置 Python 环境 (提供 web_audio.py 脚本运行环境)
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -29,29 +29,24 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f "requirements.txt" ]; then pip install -r requirements.txt; fi
 
-      # 3. 配置 pnpm 与 Node.js 环境（移除了 cache 配置）
-      - name: Install pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 8
-
+      # 3. 配置 Node.js 环境
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18
 
-      # 4. 安装依赖并构建项目
+      # 4. 使用 npm 安装所有工作区依赖并执行构建
       - name: Install dependencies and Build
         run: |
-          pnpm install --no-frozen-lockfile
-          pnpm run build
+          npm install
+          npm run build
 
       # 5. 组装 fpk 目录结构
       - name: Prepare FPK files
         run: |
           mkdir -p fpk_package
           
-          # 复制静态页面产物
+          # 复制静态网页产物
           if [ -d "apps/web/out" ]; then
             cp -r apps/web/out/* fpk_package/
           elif [ -d "out" ]; then
