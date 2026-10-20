@@ -18,7 +18,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. 配置 Python 环境 (提供 web_audio.py 脚本运行环境)
+      # 2. 安装 FFmpeg (解决 web-audio 缺失依赖问题)
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      # 3. 配置 Python 环境
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -29,19 +35,19 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f "requirements.txt" ]; then pip install -r requirements.txt; fi
 
-      # 3. 配置 Node.js 环境 (升级到 Node.js 20)
+      # 4. 配置 Node.js 环境 (Node.js 20)
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      # 4. 使用 npm 安装所有依赖并执行构建
+      # 5. 使用 npm 安装所有依赖并执行构建
       - name: Install dependencies and Build
         run: |
           npm install
           npm run build
 
-      # 5. 组装 fpk 目录结构
+      # 6. 组装 fpk 目录结构
       - name: Prepare FPK files
         run: |
           mkdir -p fpk_package
@@ -97,13 +103,13 @@ jobs:
             touch fpk_package/icon.png
           fi
 
-      # 6. 打包为 .fpk
+      # 7. 打包为 .fpk
       - name: Compress to .fpk
         run: |
           cd fpk_package
           tar -czvf ../china-textbook-study_${{ github.ref_name }}.fpk .
 
-      # 7. 上传到 GitHub Release
+      # 8. 上传到 GitHub Release
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
