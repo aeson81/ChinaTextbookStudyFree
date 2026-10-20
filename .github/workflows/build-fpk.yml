@@ -1,0 +1,102 @@
+name: Build and Release FPK
+
+on:
+  push:
+    tags:
+      - 'v*' # 当提交打上 v 开头的 tag 时触发（如 v1.0.0）
+  workflow_dispatch: # 允许在 GitHub 网页端一键手动触发
+
+permissions:
+  contents: write # 给予 Release 创建与文件写入权限
+
+jobs:
+  build-fpk:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. 拉取仓库代码
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. 安装 Node.js 环境
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      # 3. 安装依赖与构建网页静态文件
+      - name: Install dependencies and Build
+        run: |
+          npm install
+          npm run build
+
+      # 4. 组装 fpk 标准包结构
+      - name: Prepare FPK files
+        run: |
+          mkdir -p fpk_package
+          
+          # 复制构建产物（自动适配不同目录输出）
+          if [ -d "apps/web/out" ]; then
+            cp -r apps/web/out/* fpk_package/
+          elif [ -d "out" ]; then
+            cp -r out/* fpk_package/
+          elif [ -d "dist" ]; then
+            cp -r dist/* fpk_package/
+          fi
+
+          # 创建 manifest.json
+          cat << 'EOF' > fpk_package/manifest.json
+          {
+            "id": "china-textbook-study",
+            "name": "中国教材学习平台",
+            "version": "${{ github.ref_name }}",
+            "developer": "wuwangzhang1216",
+            "description": "中小学电子教材与配套音资源学习平台",
+            "arch": ["amd64", "arm64"],
+            "icon": "icon.png",
+            "main_port": 8080,
+            "protocol": "http",
+            "index_path": "/",
+            "docker": {
+              "compose_file": "docker-compose.yml"
+            }
+          }
+          EOF
+
+          # 创建 docker-compose.yml
+          cat << 'EOF' > fpk_package/docker-compose.yml
+          version: '3.8'
+          services:
+            web:
+              image: nginx:alpine
+              container_name: china-textbook-study
+              restart: unless-stopped
+              ports:
+                - "${PORT:-8080}:80"
+              volumes:
+                - ./:/usr/share/nginx/html
+          EOF
+
+          # 复制或生成图标
+          if [ -f "public/favicon.ico" ]; then
+            cp public/favicon.ico fpk_package/icon.png
+          else
+            touch fpk_package/icon.png
+          fi
+
+      # 5. 压缩为 .fpk 安装包
+      - name: Compress to .fpk
+        run: |
+          cd fpk_package
+          tar -czvf ../china-textbook-study_${{ github.ref_name }}.fpk .
+
+      # 6. 发布到 GitHub Release
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        with:
+          files: china-textbook-study_*.fpk
+          tag_name: ${{ github.ref_name }}
+          name: "Release ${{ github.ref_name }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
