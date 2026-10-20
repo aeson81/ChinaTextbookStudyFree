@@ -29,13 +29,13 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f "requirements.txt" ]; then pip install -r requirements.txt; fi
 
-      # 3. 配置 Node.js 环境
+      # 3. 配置 Node.js 环境 (升级到 Node.js 20)
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
 
-      # 4. 使用 npm 安装所有工作区依赖并执行构建
+      # 4. 使用 npm 安装所有依赖并执行构建
       - name: Install dependencies and Build
         run: |
           npm install
